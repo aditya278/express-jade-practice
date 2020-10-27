@@ -96,4 +96,40 @@ router.get('/verify/:token', async (req, res) => {
   }
 });
 
+router.post('/resendVerify', async(req, res) => {
+  try {
+    const email = req.body.email;
+    const userData = await User.findOne({ email : email });
+    if(!userData)
+      return res.status(500).json({ 'message' : 'User Does not Exist.' });
+    //Regenerate the token
+    const tokenData = { 
+      token : randomString.generate(),
+      expires : Date.now() + (1000 * 60 * 5)
+    };
+
+    await User.updateOne(
+      { email : email },
+      { verified : false, tokenData : tokenData }
+    );
+
+    res.status(200).json({'message' : 'User Verification Link resent.'});
+
+    //Sending the email
+    const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
+    const from = '"Aditya 👻" <iamadmin@iadityashukla.com>';
+    const to = email;
+    const subject = `[${userData.firstName}, Please verify your Email] Welcome to iadityashukla.com`;
+    const html = `<b> Hello ${userData.firstName},<br><br>
+                  <p> Welcome to iadityashukla.com. <br>
+                      Before you start, please
+                      <a href='${fullUrl}/verify/${tokenData.token}'>Click Here</a>
+                      to verify your email </p>`;
+    helpers.sendEmail(from, to, subject, html);
+  }
+  catch(err) {
+    res.status(500).json({ 'message' : err.message });
+  }
+})
+
 module.exports = router;
