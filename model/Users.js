@@ -30,6 +30,9 @@ const userSchema  = new Schema({
         expires : {
             type : Number
         }
+    },
+    role : {
+        type : String
     }
 });
 

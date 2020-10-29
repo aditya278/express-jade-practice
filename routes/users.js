@@ -5,6 +5,9 @@ const User = require('../model/Users');
 const bcrypt = require('bcrypt');
 const helpers = require('../helpers');
 const randomString = require('randomstring');
+const jwt = require('jsonwebtoken');
+const config = require('../config/default.json');
+const auth = require('../middleware/auth');
 
 /* GET users listing. */
 router.get('/', function(req, res, next) {
@@ -131,5 +134,130 @@ router.post('/resendVerify', async(req, res) => {
     res.status(500).json({ 'message' : err.message });
   }
 })
+
+//Sign Up with User Role
+router.post('/signup', [
+    body('firstName', "First Name is Required.").notEmpty(),
+    body("firstName", "First Name Should be a string.").isString(),
+    body("lastName", "Last Name Should be a String.").isString(),
+    body("email", "Enter Valid Email Address.").isEmail(),
+    body('password', "Minimum length should be 6.").isLength({min: 6}).custom((value, {req})=> {
+      if(value !== req.body.confirmPassword) {
+        throw new Error("Password Confirmation Failed. Mismatch in passwords.");
+      }
+      return true;
+    },
+    body("role", "The User Role is Required").notEmpty()
+    )], 
+    async(req, res) => {
+      const error = validationResult(req);
+      if(!error.isEmpty()) {
+        return res.status(400).json({'message' : error.array()});
+      }
+
+      try {
+        let { firstName, lastName, email, password, role } = req.body;
+        const user = await User.findOne({email : email});
+        if(user) {
+          return res.status(500).json({ 'message' : "User Already Exists." });
+        }
+
+        const salt = await bcrypt.genSalt(12);
+        password = await bcrypt.hash(password, salt);
+
+        const newUser = new User({
+          firstName, lastName, email, password, role
+        });
+
+        const key = config.SECRET_KEY;
+        const payload = {
+          user : {
+            id : newUser._id,
+            role : newUser.role
+          }
+        }
+
+        const accessToken = await jwt.sign(payload, key, { expiresIn: 60 * 60 });
+
+        newUser.save();
+        res.status(200).json({'message' : 'User Registered Successfully',
+                              'accessToken' : accessToken });
+      }
+      catch(err) {
+        res.status(500).json({ 'message' : err.message });
+      }
+  }
+)
+
+router.post('/login', 
+  [
+    body("email", "Enter Valid Email Address.").isEmail(),
+    body('password', "Minimum length should be 6.").isLength({min: 6})
+  ],
+  async(req, res) => {
+    try{
+      const error = validationResult(req);
+      if(!error.isEmpty()) {
+        return res.status(400).json({'message' : error.array()});
+      }
+  
+      let { email, password } = req.body;
+      const user = await User.findOne({email : email});
+      if(!user) {
+        return res.status(400).json({'message' : 'Invalid Credentials.'});
+      }
+  
+      const compareResults = await bcrypt.compare(password, user.password);
+      if(!compareResults) {
+        return res.status(400).json({'message' : 'Invalid Credentials.'});
+      }
+  
+      const key = config.SECRET_KEY;
+      const payload = {
+        user : {
+          id : user._id,
+          role : user.role
+        }
+      }
+  
+      const accessToken = await jwt.sign(payload, key, {expiresIn: 60 * 60});
+      
+      res.status(200).json(
+        {'message' : 'User Registered Successfully',
+         'accessToken' : accessToken }
+      );
+    }
+    catch(err) {
+      res.status(500).json({ 'message' : err.message });
+    }
+  }
+)
+
+router.get('/adminDashboard', auth.adminAuth, async (req, res) => {
+  try {
+  
+    const userId = req.user.id;
+
+    const userData = await User.findById(userId);
+    res.status(200).json({'message' : `Welcome Admin ${userData.firstName}`});
+  }
+  catch(err) {
+    return res.status(500).json({'message' : 'Server Error', 'error' : err.message});
+  }
+})
+
+router.get('/userDashboard', auth.userAuth, async (req, res) => {
+  try {
+  
+    const userId = req.user.id;
+
+    const userData = await User.findById(userId);
+    res.status(200).json({'message' : `Welcome User ${userData.firstName}`});
+  }
+  catch(err) {
+    return res.status(500).json({'message' : 'Server Error', 'error' : err.message});
+  }
+})
+
 
 module.exports = router;
