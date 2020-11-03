@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const authMiddleware = require('../../controllers/authMiddleware');
 const CustomerProfile = require('../../models/CustomerProfile');
+const Customer = require('../../models/Customer');
 const { body, validationResult } = require('express-validator');
 
 const router = Router();
@@ -32,7 +33,11 @@ router.post('/', [authMiddleware, [
 
     try {
         const { address, website, location, phone, company, isOpen, skills, bio, social } = req.body;
-        console.log(req.customer.userId);
+        
+        const customerData = await Customer.findById(req.customer.userId);
+        if(!customerData.active)
+            return res.status(400).json({'message' : "The User is not Active. Please Validate the email id first."});
+
         const newCustomer = new CustomerProfile({
             customer : req.customer.userId,
             address,
@@ -48,6 +53,57 @@ router.post('/', [authMiddleware, [
         console.log("saved");
         await newCustomer.save();
         res.status(200).json({newCustomer});
+    }
+    catch(err) {
+        console.error(err);
+        res.status(500).json({'message' : 'Server Error'});
+    }
+})
+
+/*
+Route: /api/customer/profile/experience GET
+Add Customer Experience 
+Private Route
+*/
+router.post('/experience', [authMiddleware, [
+    body("title", "Job Title is Required.").notEmpty(),
+    body("title", "Job Title Should be a string").isString(),
+    body("company", "Company Name is Required.").notEmpty(),
+    body("company", "Enter proper company name.").isString(),
+    body("location", "Enter proper location name.").isString(),
+    body("from", "Starting Date is Required").notEmpty(),
+    body("from", "Please provide proper Date").custom((value, {req}) => {
+        if(!Date.parse(value))
+            throw new Error('Date not in correct format');
+        return true;
+    }),
+    body("to", "Please provide proper Date").custom((value, {req}) => {
+        if(!Date.parse(value))
+            throw new Error('Date not in correct format');
+        return true;
+    }),
+    body("current", "Please provide proper current position").isBoolean(),
+    body("description", "Please provide proper Description").isString()
+]], async(req, res) => {
+    const errors = validationResult(req);
+    if(!errors.isEmpty()) {
+        return res.status(400).json({'message' : errors.array() });
+    }
+
+    try {
+        const { title, company, location, from, to, current, description } = req.body;
+        
+        const customerProfile = await CustomerProfile.findOne({ "customer": req.customer.userId});
+        if(!customerProfile)
+            return res.status(400).json({'message' : "The User profile doesn't exist."});
+
+        const exp = customerProfile.experience;
+        exp.push(req.body);
+        customerProfile.update({ $set : { experience : exp } });
+        
+        customerProfile.save();
+        console.log('Saved!');
+        res.status(200).json({customerProfile});
     }
     catch(err) {
         console.error(err);

@@ -20,6 +20,7 @@ router.post('/', [
         body('password', 'Password is Required.').notEmpty()
     ],
     async(req, res) => {
+        const errors = validationResult(req);
         if(!errors.isEmpty()) {
             return res.status(400).json({'message' : errors.array()});
         }
