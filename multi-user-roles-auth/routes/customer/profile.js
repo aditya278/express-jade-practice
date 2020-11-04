@@ -67,23 +67,9 @@ Private Route
 */
 router.post('/experience', [authMiddleware, [
     body("title", "Job Title is Required.").notEmpty(),
-    body("title", "Job Title Should be a string").isString(),
     body("company", "Company Name is Required.").notEmpty(),
-    body("company", "Enter proper company name.").isString(),
-    body("location", "Enter proper location name.").isString(),
     body("from", "Starting Date is Required").notEmpty(),
-    body("from", "Please provide proper Date").custom((value, {req}) => {
-        if(!Date.parse(value))
-            throw new Error('Date not in correct format');
-        return true;
-    }),
-    body("to", "Please provide proper Date").custom((value, {req}) => {
-        if(!Date.parse(value))
-            throw new Error('Date not in correct format');
-        return true;
-    }),
-    body("current", "Please provide proper current position").isBoolean(),
-    body("description", "Please provide proper Description").isString()
+    body("current", "Please provide proper current position").isBoolean()
 ]], async(req, res) => {
     const errors = validationResult(req);
     if(!errors.isEmpty()) {
@@ -99,10 +85,34 @@ router.post('/experience', [authMiddleware, [
 
         const exp = customerProfile.experience;
         exp.push(req.body);
-        customerProfile.update({ $set : { experience : exp } });
+        await customerProfile.update({ $set : { experience : exp } });
         
-        customerProfile.save();
+        await customerProfile.save();
         console.log('Saved!');
+        res.status(200).json({customerProfile});
+    }
+    catch(err) {
+        console.error(err);
+        res.status(500).json({'message' : 'Server Error'});
+    }
+})
+
+/*
+Route: /api/customer/profile/experience GET
+Add Customer Experience 
+Private Route
+*/
+router.delete('/experience', authMiddleware, async(req, res) => {
+    try {
+        const from = req.body.from;
+        const customerProfile = await CustomerProfile.findOne({'customer' : req.customer.userId});
+        if(!customerProfile)
+            return res.status(400).json({'message' : "The User profile doesn't exist."});
+
+        const exp = customerProfile.experience;
+        newExp = exp.filter(f => f.from !== from)
+        await customerProfile.update({ $set : { experience : newExp}});
+        console.log('Updated!');
         res.status(200).json({customerProfile});
     }
     catch(err) {
